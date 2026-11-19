@@ -1,0 +1,15 @@
+(()=>{"use strict";const $=id=>document.getElementById(id);let file=null,image=null,blobOut=null,outUrl=null;
+const input=$("fileInput"),preview=$("preview"),result=$("result"),quality=$("quality");
+function clear(){blobOut=null;$("downloadBtn").disabled=true;if(outUrl){URL.revokeObjectURL(outUrl);outUrl=null}}
+input.addEventListener("change",()=>{file=input.files[0];if(!file)return;if(!file.type.startsWith("image/")){$("fileInfo").textContent="Please select a valid image.";return}const url=URL.createObjectURL(file),img=new Image();img.onload=()=>{image=img;$("fileInfo").textContent=`${file.name} · ${img.naturalWidth} × ${img.naturalHeight} · ${(file.size/1024).toFixed(1)} KB`;result.textContent=`Original size: ${(file.size/1024).toFixed(1)} KB`;preview.innerHTML='<div class="empty-state">Image loaded. Adjust settings and compress.</div>';$("compressBtn").disabled=false;clear()};img.onerror=()=>{$("fileInfo").textContent="This image could not be opened."};img.src=url});
+quality.addEventListener("input",()=>{$("qualityValue").textContent=quality.value+"%"});
+function canvasBlob(canvas,mime,q){return new Promise(resolve=>canvas.toBlob(resolve,mime,q))}
+$("compressBtn").addEventListener("click",async()=>{if(!image||!file)return;const mime=$("format").value,target=Number($("targetKB").value),hasTarget=$("targetKB").value.trim()!=="";if(hasTarget&&(!Number.isFinite(target)||target<=0)){alert("Enter a valid target size in KB.");return}
+const canvas=document.createElement("canvas");canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;const ctx=canvas.getContext("2d");if(mime==="image/jpeg"){ctx.fillStyle="#ffffff";ctx.fillRect(0,0,canvas.width,canvas.height)}ctx.drawImage(image,0,0);
+let q=Number(quality.value)/100;let best=await canvasBlob(canvas,mime,q);if(!best){alert("Could not compress this image in the selected format.");return}
+if(hasTarget&&mime!=="image/png"){let low=.05,high=1;for(let i=0;i<9;i++){const mid=(low+high)/2;const candidate=await canvasBlob(canvas,mime,mid);if(!candidate)break;if(candidate.size<=target*1024){best=candidate;low=mid}else high=mid}}
+if(hasTarget&&mime==="image/png"&&best.size>target*1024){result.textContent="PNG is lossless in this tool, so the requested target size could not be reached. Try JPG or WebP."; }
+clear();blobOut=best;outUrl=URL.createObjectURL(best);const img=document.createElement("img");img.alt="Compressed image preview";img.src=outUrl;preview.replaceChildren(img);const before=file.size,after=best.size,diff=before-after,pct=before?diff/before*100:0;const saved=diff>=0?`${pct.toFixed(1)}% smaller`:`${Math.abs(pct).toFixed(1)}% larger`;result.innerHTML=`<div>Original: <strong>${(before/1024).toFixed(1)} KB</strong></div><div>Compressed: <strong>${(after/1024).toFixed(1)} KB</strong></div><div>Change: <strong>${saved}</strong></div>`;$("downloadBtn").disabled=false;
+});
+$("downloadBtn").addEventListener("click",()=>{if(!blobOut)return;const ext=$("format").value.split("/")[1];const a=document.createElement("a");a.href=outUrl;a.download=`compressed-image.${ext}`;a.click()});
+})();
